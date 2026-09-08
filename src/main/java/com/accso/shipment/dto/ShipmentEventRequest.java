@@ -3,18 +3,22 @@ package com.accso.shipment.dto;
 import com.accso.shipment.domain.ShipmentStatus;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Size;
 
 import java.time.Instant;
 
 public class ShipmentEventRequest {
 
     @NotBlank
+    @Size(max = 255)
     private String eventId;
 
     @NotBlank
+    @Size(max = 255)
     private String partner;
 
     @NotBlank
+    @Size(max = 255)
     private String shipmentId;
 
     @NotNull
@@ -26,6 +30,7 @@ public class ShipmentEventRequest {
     @NotNull
     private Instant receivedAt;
 
+    @Size(max = 255)
     private String location;
 
     public String getEventId() {

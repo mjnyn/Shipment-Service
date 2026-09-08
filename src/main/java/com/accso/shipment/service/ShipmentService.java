@@ -2,6 +2,7 @@ package com.accso.shipment.service;
 
 import com.accso.shipment.dto.ShipmentEventHistoryResponse;
 import com.accso.shipment.dto.ShipmentResponse;
+import com.accso.shipment.entity.ShipmentEvent;
 import com.accso.shipment.mapper.ShipmentEventMapper;
 import com.accso.shipment.mapper.ShipmentMapper;
 import com.accso.shipment.repository.ShipmentEventRepository;
@@ -24,8 +25,11 @@ public class ShipmentService {
     }
 
     public Optional<ShipmentResponse> findShipment(String shipmentId) {
-        return repository.getRulingEvent(shipmentId)
-                .map(event -> mapper.toResponse(event, repository.countEvents(shipmentId)));
+        List<ShipmentEvent> events = repository.getEvents(shipmentId);
+        if (events.isEmpty()) {
+            return Optional.empty();
+        }
+        return Optional.of(mapper.toResponse(events.getLast(), events.size()));
     }
 
     public Optional<List<ShipmentEventHistoryResponse>> findShipmentEvents(String shipmentId) {

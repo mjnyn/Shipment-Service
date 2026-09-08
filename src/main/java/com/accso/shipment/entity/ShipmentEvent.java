@@ -22,10 +22,10 @@ public class ShipmentEvent {
     @Column(nullable = false)
     private ShipmentStatus status;
 
-    @Column(nullable = false)
+    @Column(nullable = false, secondPrecision = 9)
     private Instant occurredAt;
 
-    @Column(nullable = false)
+    @Column(nullable = false, secondPrecision = 9)
     private Instant receivedAt;
 
     private String location;

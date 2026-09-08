@@ -28,6 +28,9 @@ class ShipmentEventServiceTests {
     @Autowired
     private ShipmentEventService service;
 
+    @Autowired
+    private ShipmentService shipmentService;
+
     @MockitoSpyBean
     private ShipmentEventRepository eventRepository;
 
@@ -247,6 +250,71 @@ class ShipmentEventServiceTests {
         assertEquals(1, shipmentRepository.count());
         assertEquals(1, eventRepository.countEvents("ship-1"));
         assertEquals("ship-1", eventRepository.findById("evt-1").orElseThrow().getShipmentId());
+    }
+
+    @Test
+    void nanosecondTimestampsArePreservedAndIdenticalRetryMatches() {
+        ShipmentEventRequest request = event("evt-1", "ship-1", ShipmentStatus.IN_TRANSIT,
+                "2026-04-10T12:00:00.123456789Z", "2026-04-10T12:00:05.987654321Z");
+        service.ingest(request);
+
+        ShipmentEventResponse retry = service.ingest(request);
+
+        assertEquals(IngestionOutcome.DUPLICATE, retry.getOutcome());
+        assertFalse(retry.getPayloadMismatch());
+        var history = shipmentService.findShipmentEvents("ship-1").orElseThrow();
+        assertEquals(1, history.size());
+        assertEquals(request.getOccurredAt(), history.getFirst().getOccurredAt());
+        assertEquals(request.getReceivedAt(), history.getFirst().getReceivedAt());
+    }
+
+    @Test
+    void laterOccurredAtNanosecondWinsOverGreaterEventId() {
+        service.ingest(event("evt-z", "ship-1", ShipmentStatus.IN_TRANSIT,
+                "2026-04-10T12:00:00.000000100Z", "2026-04-10T12:00:05Z"));
+
+        ShipmentEventResponse response = service.ingest(event("evt-a", "ship-1", ShipmentStatus.DELIVERED,
+                "2026-04-10T12:00:00.000000200Z", "2026-04-10T12:00:05Z"));
+
+        assertEquals(IngestionOutcome.APPLIED, response.getOutcome());
+        assertEquals(ShipmentStatus.DELIVERED, response.getCurrentStatus());
+        var history = shipmentService.findShipmentEvents("ship-1").orElseThrow();
+        assertEquals("evt-z", history.getFirst().getEventId());
+        assertEquals("evt-a", history.getLast().getEventId());
+        assertEquals("evt-a", shipmentService.findShipment("ship-1").orElseThrow().getRulingEventId());
+    }
+
+    @Test
+    void laterReceivedAtNanosecondWinsOverGreaterEventId() {
+        service.ingest(event("evt-z", "ship-1", ShipmentStatus.IN_TRANSIT,
+                "2026-04-10T12:00:00Z", "2026-04-10T12:00:05.000000100Z"));
+
+        ShipmentEventResponse response = service.ingest(event("evt-a", "ship-1", ShipmentStatus.DELIVERED,
+                "2026-04-10T12:00:00Z", "2026-04-10T12:00:05.000000200Z"));
+
+        assertEquals(IngestionOutcome.APPLIED, response.getOutcome());
+        assertEquals(ShipmentStatus.DELIVERED, response.getCurrentStatus());
+        assertEquals("evt-a", shipmentService.findShipment("ship-1").orElseThrow().getRulingEventId());
+    }
+
+    @Test
+    void shipmentStateRemainsConsistentWhenAnotherEventArrives() {
+        service.ingest(event("evt-1", "ship-1", ShipmentStatus.IN_TRANSIT,
+                "2026-04-10T12:00:00Z", "2026-04-10T12:00:05Z"));
+        var eventsBeforeSecondInsert = eventRepository.getEvents("ship-1");
+
+        service.ingest(event("evt-2", "ship-1", ShipmentStatus.DELIVERED,
+                "2026-04-10T13:00:00Z", "2026-04-10T13:00:05Z"));
+
+        // Simulate a query that finished before the second insert committed.
+        doReturn(eventsBeforeSecondInsert).when(eventRepository).getEvents("ship-1");
+
+        var response = shipmentService.findShipment("ship-1").orElseThrow();
+
+        assertEquals("evt-1", response.getRulingEventId());
+        assertEquals(ShipmentStatus.IN_TRANSIT, response.getCurrentStatus());
+        assertEquals(1, response.getEventsStored());
+        assertEquals(2, eventRepository.countEvents("ship-1"));
     }
 
     private ShipmentEventRequest event(String eventId, String shipmentId, ShipmentStatus status, String occurredAt, String receivedAt) {

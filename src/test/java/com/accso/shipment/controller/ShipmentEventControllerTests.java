@@ -12,6 +12,9 @@ import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 
+import java.util.List;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -173,9 +176,25 @@ class ShipmentEventControllerTests {
                         }
                         """))
                 .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.reason").exists())
+                .andExpect(jsonPath("$.reason").value("shipmentId must not be blank"))
                 .andExpect(jsonPath("$.outcome").value(IngestionOutcome.INVALID.name()))
                 .andExpect(jsonPath("$.eventId").value("evt-1"));
+    }
+
+    @Test
+    void blankPartnerReturnsFieldValidationReason() throws Exception {
+        mockMvc.perform(post("/shipment-events")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(validEventJson().replace("\"dhl\"", "\" \"")))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.outcome").value("INVALID"))
+                .andExpect(jsonPath("$.reason").value("partner must not be blank"))
+                .andExpect(jsonPath("$.eventId").value("evt-1"))
+                .andExpect(jsonPath("$.shipmentId").value("ship-1"))
+                .andExpect(jsonPath("$.currentStatus").doesNotExist());
+
+        assertEquals(0, eventRepository.count());
+        assertEquals(0, shipmentRepository.count());
     }
 
     @Test
@@ -184,17 +203,101 @@ class ShipmentEventControllerTests {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                         {
+                          "status": "A_RANDOM_STATUS",
                           "eventId": "evt-1",
                           "partner": "dhl",
                           "shipmentId": "ship-1",
-                          "status": "A_RANDOM_STATUS",
                           "occurredAt": "2026-03-10T10:00:00Z",
                           "receivedAt": "2026-03-10T10:00:05Z",
                           "location": "Rotterdam"
                         }
                         """))
                 .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.reason").exists())
-                .andExpect(jsonPath("$.outcome").value(IngestionOutcome.INVALID.name()));
+                .andExpect(jsonPath("$.reason").value("Request contains an invalid status, timestamp, or field type"))
+                .andExpect(jsonPath("$.outcome").value(IngestionOutcome.INVALID.name()))
+                .andExpect(jsonPath("$.eventId").value("evt-1"))
+                .andExpect(jsonPath("$.shipmentId").value("ship-1"))
+                .andExpect(jsonPath("$.currentStatus").doesNotExist());
+        assertEquals(0, eventRepository.count());
+        assertEquals(0, shipmentRepository.count());
+    }
+
+    @Test
+    void invalidTimestampsEchoIdentifiersAndStoreNothing() throws Exception {
+        for (String timestamp : List.of("2026-03-10T10:00:00Z", "2026-03-10T10:00:05Z")) {
+            mockMvc.perform(post("/shipment-events")
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(validEventJson().replace(timestamp, "not-a-timestamp")))
+                    .andExpect(status().isBadRequest())
+                    .andExpect(jsonPath("$.outcome").value("INVALID"))
+                    .andExpect(jsonPath("$.eventId").value("evt-1"))
+                    .andExpect(jsonPath("$.shipmentId").value("ship-1"))
+                    .andExpect(jsonPath("$.reason").value("Request contains an invalid status, timestamp, or field type"))
+                    .andExpect(jsonPath("$.currentStatus").doesNotExist());
+        }
+        assertEquals(0, eventRepository.count());
+        assertEquals(0, shipmentRepository.count());
+    }
+
+    @Test
+    void oversizedStringsReturnBadRequestAndStoreNothing() throws Exception {
+        for (String value : List.of("evt-1", "ship-1", "dhl", "Amsterdam")) {
+            mockMvc.perform(post("/shipment-events")
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(validEventJson().replace(value, "x".repeat(256))))
+                    .andExpect(status().isBadRequest())
+                    .andExpect(jsonPath("$.outcome").value("INVALID"))
+                    .andExpect(jsonPath("$.reason").exists())
+                    .andExpect(jsonPath("$.currentStatus").doesNotExist());
+        }
+        assertEquals(0, eventRepository.count());
+        assertEquals(0, shipmentRepository.count());
+    }
+
+    @Test
+    void stringsAtMaximumLengthAreAccepted() throws Exception {
+        String payload = validEventJson();
+        for (String value : List.of("evt-1", "ship-1", "dhl", "Amsterdam")) {
+            payload = payload.replace(value, "x".repeat(255));
+        }
+
+        mockMvc.perform(post("/shipment-events").contentType(MediaType.APPLICATION_JSON).content(payload))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.outcome").value("APPLIED"));
+        assertEquals(1, eventRepository.count());
+    }
+
+    @Test
+    void locationCanStillBeNull() throws Exception {
+        mockMvc.perform(post("/shipment-events")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(validEventJson().replace("\"Amsterdam\"", "null")))
+                .andExpect(status().isCreated());
+    }
+
+    @Test
+    void malformedOrNonObjectJsonReturnsInvalid() throws Exception {
+        for (String payload : List.of("{\"eventId\":", "[]", "null", "42")) {
+            mockMvc.perform(post("/shipment-events").contentType(MediaType.APPLICATION_JSON).content(payload))
+                    .andExpect(status().isBadRequest())
+                    .andExpect(jsonPath("$.outcome").value("INVALID"))
+                    .andExpect(jsonPath("$.reason").exists());
+        }
+        assertEquals(0, eventRepository.count());
+        assertEquals(0, shipmentRepository.count());
+    }
+
+    private String validEventJson() {
+        return """
+                {
+                  "eventId": "evt-1",
+                  "partner": "dhl",
+                  "shipmentId": "ship-1",
+                  "status": "IN_TRANSIT",
+                  "occurredAt": "2026-03-10T10:00:00Z",
+                  "receivedAt": "2026-03-10T10:00:05Z",
+                  "location": "Amsterdam"
+                }
+                """;
     }
 }
