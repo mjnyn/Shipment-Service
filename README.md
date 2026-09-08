@@ -37,7 +37,7 @@ Get shipment events example:
 curl -X GET http://localhost:8080/shipments/ship-456/events
 ```
 
-Get current shipment example:
+Get the current shipment example:
 ```bash
 curl http://localhost:8080/shipments/ship-456
 ```

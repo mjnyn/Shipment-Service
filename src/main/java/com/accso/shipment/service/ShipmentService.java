@@ -24,12 +24,12 @@ public class ShipmentService {
     }
 
     public Optional<ShipmentResponse> findShipment(String shipmentId) {
-        return repository.findFirstByShipmentIdOrderByOccurredAtDescReceivedAtDescEventIdDesc(shipmentId)
-                .map(event -> mapper.toResponse(event, repository.countByShipmentId(shipmentId)));
+        return repository.getRulingEvent(shipmentId)
+                .map(event -> mapper.toResponse(event, repository.countEvents(shipmentId)));
     }
 
     public Optional<List<ShipmentEventHistoryResponse>> findShipmentEvents(String shipmentId) {
-        List<ShipmentEventHistoryResponse> events = repository.findByShipmentIdOrderByOccurredAtAscReceivedAtAscEventIdAsc(shipmentId).stream().map(eventMapper::toHistoryResponse).toList();
+        List<ShipmentEventHistoryResponse> events = repository.getEvents(shipmentId).stream().map(eventMapper::toHistoryResponse).toList();
 
         if (events.isEmpty()) {
             return Optional.empty();

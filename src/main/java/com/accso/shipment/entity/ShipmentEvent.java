@@ -14,8 +14,9 @@ public class ShipmentEvent {
     @Column(nullable = false)
     private String partner;
 
-    @Column(nullable = false)
-    private String shipmentId;
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name="shipment_id", nullable = false)
+    private Shipment shipment;
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
@@ -32,10 +33,10 @@ public class ShipmentEvent {
     protected ShipmentEvent() {
     }
 
-    public ShipmentEvent(String eventId, String partner, String shipmentId, ShipmentStatus status, Instant occurredAt, Instant receivedAt, String location) {
+    public ShipmentEvent(String eventId, String partner, Shipment shipment, ShipmentStatus status, Instant occurredAt, Instant receivedAt, String location) {
         this.eventId = eventId;
         this.partner = partner;
-        this.shipmentId = shipmentId;
+        this.shipment = shipment;
         this.status = status;
         this.occurredAt = occurredAt;
         this.receivedAt = receivedAt;
@@ -58,12 +59,14 @@ public class ShipmentEvent {
         this.partner = partner;
     }
 
-    public String getShipmentId() {
-        return shipmentId;
+    public String getShipmentId() { return shipment.getShipmentId(); }
+
+    public Shipment getShipment() {
+        return shipment;
     }
 
-    public void setShipmentId(String shipmentId) {
-        this.shipmentId = shipmentId;
+    public void setShipmentId(Shipment shipment) {
+        this.shipment = shipment;
     }
 
     public ShipmentStatus getStatus() {

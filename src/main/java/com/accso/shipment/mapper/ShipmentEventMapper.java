@@ -4,17 +4,18 @@ import com.accso.shipment.domain.IngestionOutcome;
 import com.accso.shipment.dto.ShipmentEventHistoryResponse;
 import com.accso.shipment.dto.ShipmentEventRequest;
 import com.accso.shipment.dto.ShipmentEventResponse;
+import com.accso.shipment.entity.Shipment;
 import com.accso.shipment.entity.ShipmentEvent;
 import org.springframework.stereotype.Component;
 
 @Component
 public class ShipmentEventMapper {
 
-    public ShipmentEvent toEntity(ShipmentEventRequest request) {
+    public ShipmentEvent toEntity(ShipmentEventRequest request, Shipment shipment) {
         return new ShipmentEvent(
                 request.getEventId(),
                 request.getPartner(),
-                request.getShipmentId(),
+                shipment,
                 request.getStatus(),
                 request.getOccurredAt(),
                 request.getReceivedAt(),

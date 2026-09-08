@@ -3,6 +3,7 @@ package com.accso.shipment.controller;
 import com.accso.shipment.domain.IngestionOutcome;
 import com.accso.shipment.domain.ShipmentStatus;
 import com.accso.shipment.repository.ShipmentEventRepository;
+import com.accso.shipment.repository.ShipmentRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -23,11 +24,15 @@ class ShipmentEventControllerTests {
     private MockMvc mockMvc;
 
     @Autowired
-    private ShipmentEventRepository repository;
+    private ShipmentEventRepository eventRepository;
+
+    @Autowired
+    private ShipmentRepository shipmentRepository;
 
     @BeforeEach
     void setUp() {
-        repository.deleteAll();
+        eventRepository.deleteAll();
+        shipmentRepository.deleteAll();
     }
 
     @Test
